@@ -10,3 +10,5 @@ actix-web = "4.0.0-beta.15"
 actix-rt = "2.5.0"
 sqlx = {version = "0.5.9", features= ["runtime-actix-native-tls","sqlite"]}
 jsonwebtoken = "8.0.0-beta.7"
+serde = "1.0.132"
+serde_json = "1.0.73"

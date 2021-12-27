@@ -9,6 +9,8 @@ dependencies = [
  "actix-rt",
  "actix-web",
  "jsonwebtoken",
+ "serde",
+ "serde_json",
  "sqlx",
 ]
 

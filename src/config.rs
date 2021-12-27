@@ -5,7 +5,7 @@ pub fn config(cfg: &mut web::ServiceConfig){
         web::scope(&"/v1").
             service(
                 web::resource("/auth").
-                    route(web::get().to(controllers::auth_controller::loginUser))
+                    route(web::post().to(controllers::auth_controller::loginUser))
             )
     );
 }
