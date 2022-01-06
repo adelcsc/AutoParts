@@ -1,10 +1,12 @@
 mod config;
 mod controllers;
 use actix_web::{App, HttpServer};
+use sea_orm::Database;
 use crate::config::config;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    let conn=Database::connect("sqlite:app.db").await.unwrap();
     HttpServer::new(|| {
         App::new()
             .configure(config)
