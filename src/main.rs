@@ -1,5 +1,7 @@
 mod config;
 mod controllers;
+mod entities;
+
 use actix_web::{App, HttpServer};
 use sea_orm::Database;
 use crate::config::config;

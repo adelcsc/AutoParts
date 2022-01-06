@@ -24,3 +24,11 @@ pub mod place_item;
 pub mod place_locations;
 pub mod places;
 pub mod users;
+
+pub struct Query;
+
+impl Query {
+    async fn names(&self)-> String{
+        "hide".to_string()
+    }
+}
