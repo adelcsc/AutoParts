@@ -12,4 +12,6 @@ jsonwebtoken = "8.0.0-beta.7"
 serde = "1.0.132"
 serde_json = "1.0.73"
 sea-orm = {version = "0.5.0", features = ["sqlx-sqlite","runtime-actix-native-tls","macros"], default-features=false}
-async-graphql = "3.0.19"
+async-graphql = {version = "3.0.19", features = ["dataloader","log"]}
+async-graphql-actix-web = "3.0.19"
+itertools = "0.10.3"
