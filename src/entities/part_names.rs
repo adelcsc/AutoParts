@@ -21,8 +21,8 @@ pub struct Model {
 #[derive(Clone, Debug, PartialEq,Eq,Hash,Default,InputObject)]
 #[graphql(name="PartNameInput")]
 pub struct ModelInput {
-    pub id: i32,
-    pub name: String,
+    pub id: Option<i32>,
+    pub name: Option<String>,
 }
 #[ComplexObject]
 impl Model {
@@ -45,14 +45,24 @@ impl Loader<ModelInput> for SqliteLoader {
         let mut rs : HashMap<ModelInput,Vec<Model>> = HashMap::new();
         for key in keys {
             let mut cond = Condition::all();
-
+            if let Some(id)=key.id {
+                cond=cond.add(Column::Id.eq(id));
+            }
+            if let Some(name)=&key.name {
+                cond=cond.add(Column::Name.like(name));
+            }
             condition=condition.add(cond);
         }
         let db_result = Entity::find().filter(condition).all(&self.pool).await.unwrap();
         for key in keys {
             let res= db_result.iter().filter(|item| {
                 let mut is_it =true;
-
+                if let Some(id)=key.id {
+                    is_it =id==item.id;
+                }
+                if let Some(name)=&key.name {
+                    is_it =item.name.contains(name.replace("%","").as_str());
+                }
                 is_it
             }).map(|found| {
                 found.clone()

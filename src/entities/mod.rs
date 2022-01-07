@@ -49,9 +49,12 @@ impl Query {
     //
 
     // PartName Model
-    async fn parts(&self,ctx : &Context<'_>,like : Option<String>) ->Vec<part_names::Model> {
-            let conn = ctx.data_unchecked::<DLoader>();
-            part_names::Entity::find().all(&conn.loader().pool).await.unwrap()
+    async fn partNames(&self,ctx : &Context<'_>,like : Option<part_names::ModelInput>) ->Vec<part_names::Model> {
+        let loader = ctx.data_unchecked::<DLoader>();
+        match like {
+            None => {return part_names::Entity::find().all(&loader.loader().pool).await.unwrap();}
+            Some(like) => {return loader.load_one(like).await.unwrap().unwrap();}
+        }
     }
     //
 

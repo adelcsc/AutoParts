@@ -31,7 +31,7 @@ pub struct ModelInput {
 impl Model {
     async fn partName(&self,ctx:&Context<'_>,like : Option<super::part_names::ModelInput>) -> super::part_names::Model{
         let loader = ctx.data_unchecked::<DLoader>();
-        loader.load_one(super::part_names::ModelInput{id:self.part_id,..super::part_names::ModelInput::default()}).await.unwrap().unwrap().get(0).unwrap().to_owned()
+        loader.load_one(super::part_names::ModelInput{id:Some(self.part_id),..super::part_names::ModelInput::default()}).await.unwrap().unwrap().get(0).unwrap().to_owned()
     }
 }
 #[async_trait]
