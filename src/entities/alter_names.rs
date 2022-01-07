@@ -42,6 +42,7 @@ impl Loader<Model> for SqliteLoader {
             }
             condition=condition.add(cond);
         }
+        println!("{}",Entity::find().filter(condition.clone()).build(DbBackend::Sqlite).to_string());
         let db_result = Entity::find().filter(condition).all(&self.pool).await.unwrap();
         for key in keys {
             let res= db_result.iter().filter(|item| {
@@ -53,7 +54,7 @@ impl Loader<Model> for SqliteLoader {
                     is_it =key.part_id==item.part_id;
                 }
                 if !key.name.is_empty(){
-                    is_it =item.name.contains(key.name.as_str());
+                    is_it =item.name.contains(key.name.replace("%","").as_str());
                 }
                 is_it
             }).map(|found| {
