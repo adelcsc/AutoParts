@@ -1,6 +1,8 @@
 mod config;
 mod controllers;
 mod entities;
+#[cfg(test)]
+mod tests;
 
 use std::io::Bytes;
 use actix_web::{App, guard, HttpResponse, HttpServer, web};

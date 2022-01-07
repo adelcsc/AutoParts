@@ -5,14 +5,15 @@ use async_graphql::async_trait::async_trait;
 use async_graphql::dataloader::{DataLoader, Loader};
 use async_graphql::{ComplexObject, Context, Object, SimpleObject};
 use itertools::Itertools;
-use sea_orm::EntityTrait;
+use sea_orm::{DbBackend, EntityTrait, QueryTrait};
 use sea_orm::Condition;
 use sea_orm::entity::prelude::*;
 use crate::entities::{Query, SqliteLoader};
+use crate::entities::places::Column::Col;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel,Eq,Hash,SimpleObject)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel,Eq,Hash,SimpleObject,Default)]
+#[graphql(name="AlterName")]
 #[sea_orm(table_name = "alter_names")]
-#[graphql(name = "AlterName")]
 pub struct Model {
     pub part_id: i32,
     pub name: String,
@@ -28,29 +29,37 @@ impl Loader<Model> for SqliteLoader {
     async fn load(&self, keys: &[Model]) -> Result<HashMap<Model, Self::Value>, Self::Error> {
         let mut condition = Condition::any();
         let mut rs : HashMap<Model,Vec<Model>> = HashMap::new();
-        let lookById =keys.iter().filter(|key| {key.id!=0}).map(|model| {model.id}).collect_vec();
-        let lookByPartId = keys.iter().filter(|key| {key.part_id!=0}).map(|model| {model.part_id}).collect_vec();
-        let lookByName = keys.iter().filter(|key| {!key.name.is_empty()}).map(|model| {&model.name}).collect_vec();
-        if !lookById.is_empty(){
-            condition=condition.add(Column::Id.is_in(lookById));
-        }
-        if !lookByPartId.is_empty(){
-            condition=condition.add(Column::PartId.is_in(lookByPartId));
-        }
-        for str in lookByName {
-            condition=condition.add(Column::Name.like(str.as_str()));
-        }
-        let db_rs = Entity::find().filter(condition).all(&self.pool).await.unwrap();
         for key in keys {
-            if key.id!=0{
-                rs.insert(key.to_owned(),db_rs.iter().filter(|rs| {rs.id==key.id}).map(|rs| {rs.clone()}).collect_vec());
+            let mut cond = Condition::all();
+            if key.part_id!=0 {
+                cond=cond.add(Column::PartId.eq(key.part_id));
             }
-            if key.part_id!=0{
-                rs.insert(key.to_owned(),db_rs.iter().filter(|rs| {rs.part_id==key.part_id}).map(|rs| {rs.clone()}).collect_vec());
+            if key.id!=0{
+                cond=cond.add(Column::Id.eq(key.id));
             }
             if !key.name.is_empty(){
-                rs.insert(key.to_owned(),db_rs.iter().filter(|rs| {rs.name.contains(&key.name)}).map(|rs| {rs.clone()}).collect_vec());
+                cond=cond.add(Column::Name.like(key.name.as_str()));
             }
+            condition=condition.add(cond);
+        }
+        let db_result = Entity::find().filter(condition).all(&self.pool).await.unwrap();
+        for key in keys {
+            let res= db_result.iter().filter(|item| {
+                let mut is_it =true;
+                if key.id!=0{
+                    is_it =key.id==item.id;
+                }
+                if key.part_id!=0{
+                    is_it =key.part_id==item.part_id;
+                }
+                if !key.name.is_empty(){
+                    is_it =item.name.contains(key.name.as_str());
+                }
+                is_it
+            }).map(|found| {
+                found.clone()
+            }).collect_vec();
+            rs.insert(key.to_owned(),res);
         }
         Ok(rs)
     }

@@ -44,6 +44,14 @@ impl Query {
         alter_names::Entity::find().all(&conn.loader().pool).await.unwrap()
     }
     //
+
+    // PartName Model
+    async fn parts(&self,ctx : &Context<'_>) ->Vec<part_names::Model> {
+            let conn = ctx.data_unchecked::<DLoader>();
+            part_names::Entity::find().all(&conn.loader().pool).await.unwrap()
+    }
+    //
+
 }
 pub struct SqliteLoader {
     pub(crate) pool : DatabaseConnection
