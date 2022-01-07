@@ -39,17 +39,17 @@ pub type DLoader = DataLoader<SqliteLoader>;
 impl Query {
 
     //AlterName Model
-    async fn alterNames(&self,ctx : &Context<'_>,like : Option<String>) ->Vec<alter_names::Model> {
+    async fn alterNames(&self,ctx : &Context<'_>,like : Option<alter_names::ModelInput>) ->Vec<alter_names::Model> {
         let loader = ctx.data_unchecked::<DLoader>();
         match like {
             None => {return alter_names::Entity::find().all(&loader.loader().pool).await.unwrap();}
-            Some(like) => {return loader.load_one(alter_names::Model{name:like,..alter_names::Model::default()}).await.unwrap().unwrap();}
+            Some(like) => {return loader.load_one(like).await.unwrap().unwrap();}
         }
     }
     //
 
     // PartName Model
-    async fn parts(&self,ctx : &Context<'_>) ->Vec<part_names::Model> {
+    async fn parts(&self,ctx : &Context<'_>,like : Option<String>) ->Vec<part_names::Model> {
             let conn = ctx.data_unchecked::<DLoader>();
             part_names::Entity::find().all(&conn.loader().pool).await.unwrap()
     }
