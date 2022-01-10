@@ -5,10 +5,11 @@ use async_graphql::async_trait::async_trait;
 use async_graphql::dataloader::{DataLoader, Loader};
 use async_graphql::{ComplexObject, Context, InputObject, Object, SimpleObject};
 use itertools::Itertools;
-use sea_orm::{DbBackend, EntityTrait, QueryTrait};
+use sea_orm::{DbBackend, EntityTrait, QuerySelect, QueryTrait};
 use sea_orm::Condition;
 use sea_orm::entity::prelude::*;
-use crate::entities::{DLoader, Query, SqliteLoader};
+use macros::FilterQueryBuilder;
+use crate::entities::{DLoader, Paging, Query, SqliteLoader};
 use crate::entities::places::Column::Col;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel,Eq,Hash,SimpleObject,Default)]
@@ -20,63 +21,30 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: i32,
 }
-#[derive(Clone, Debug, PartialEq,Eq,Hash,Default,InputObject)]
+#[derive(Clone, Debug, PartialEq,Eq,Hash,Default,InputObject,FilterQueryBuilder)]
 #[graphql(name="AlterNameInput")]
 pub struct ModelInput {
     pub part_id: Option<i32>,
     pub name: Option<String>,
     pub id: Option<i32>,
+    pub page: Option<Paging>
 }
+
 #[ComplexObject]
 impl Model {
     async fn partName(&self,ctx:&Context<'_>,like : Option<super::part_names::ModelInput>) -> super::part_names::Model{
         let loader = ctx.data_unchecked::<DLoader>();
+        if let Some(mut model) = like{
+            model.id = Some(self.part_id);
+            match loader.load_one(model).await.unwrap().unwrap().get(0) {
+                None => {return super::part_names::Model::default()}
+                Some(found) => {return found.to_owned()}
+            }
+        }
         loader.load_one(super::part_names::ModelInput{id:Some(self.part_id),..super::part_names::ModelInput::default()}).await.unwrap().unwrap().get(0).unwrap().to_owned()
     }
 }
-#[async_trait]
-impl Loader<ModelInput> for SqliteLoader {
-    type Value = Vec<Model>;
-    type Error = ();
 
-    async fn load(&self, keys: &[ModelInput]) -> Result<HashMap<ModelInput, Self::Value>, Self::Error> {
-        let mut condition = Condition::any();
-        let mut rs : HashMap<ModelInput,Vec<Model>> = HashMap::new();
-        for key in keys {
-            let mut cond = Condition::all();
-            if let Some(part_id)=key.part_id {
-                cond=cond.add(Column::PartId.eq(part_id));
-            }
-            if let Some(id)=key.id{
-                cond=cond.add(Column::Id.eq(id));
-            }
-            if let Some(name) = &key.name{
-                cond=cond.add(Column::Name.like(name.as_str()));
-            }
-            condition=condition.add(cond);
-        }
-        let db_result = Entity::find().filter(condition).all(&self.pool).await.unwrap();
-        for key in keys {
-            let res= db_result.iter().filter(|item| {
-                let mut is_it =true;
-                if let Some(id)=key.id{
-                    is_it =id==item.id;
-                }
-                if let Some(part_id)=key.part_id {
-                    is_it =part_id==item.part_id;
-                }
-                if let Some(name) = &key.name{
-                    is_it =item.name.contains(name.replace("%","").as_str());
-                }
-                is_it
-            }).map(|found| {
-                found.clone()
-            }).collect_vec();
-            rs.insert(key.to_owned(),res);
-        }
-        Ok(rs)
-    }
-}
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
