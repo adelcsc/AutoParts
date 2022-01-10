@@ -45,7 +45,7 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                     "String" => {
                         let token= quote! {
                             let mut #field_name_condition = Condition::any();
-                            for name in keys.iter().filter(|x1| { match x1.#field_name {
+                            for #field_name in keys.iter().filter(|x1| { match x1.#field_name {
                                     None => {false}
                                     Some(_) => {true}
                                 } }).map(|x1| { x1.#field_name.as_ref().unwrap() }).unique().collect_vec() {
