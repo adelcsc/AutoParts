@@ -8,23 +8,16 @@ use syn::{Attribute, Data, ItemStruct};
 use std::str::FromStr;
 use convert_case::Case;
 use convert_case::Casing;
-#[proc_macro]
-pub fn make_it(_item: TokenStream) -> TokenStream {
-    let ast:syn::ItemStruct = syn::parse(_item).unwrap();
-    let fiel=ast.fields.iter().map(|str| {str.ident.as_ref().unwrap()}).collect_vec();
-    //let fie:Vec<&syn::Ident>=ast.fields.iter().map(|field| {field.ident.to_owned().unwrap()}).collect_vec();
-    //let xd = fie.get(0);
-    let xd = fiel.get(0).unwrap();
-    let f=quote! {let #xd=65;};
-    f.into()
-}
 
-#[proc_macro_derive(FilterQueryBuilder,attributes(join))]
+
+
+#[proc_macro_derive(FilterQueryBuilder,attributes(join,vec,one))]
 pub fn get_query_filter(_item : TokenStream)->TokenStream {
     let ast: syn::DeriveInput = syn::parse(_item).unwrap();
     let name = ast.ident;
     let mut tokens:Vec<proc_macro2::TokenStream>=Vec::new();
     let mut tokens_sort:Vec<proc_macro2::TokenStream>=Vec::new();
+    let mut tokens_ob_fields : Vec<proc_macro2::TokenStream> = Vec::new();
     if let syn::Data::Struct(info) = ast.data {
         if let syn::Fields::Named(fields) = info.fields{
             for field in fields.named {
@@ -114,12 +107,64 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                                 tokens.push(token);
                             }
                         }
+                        match field.attrs.as_slice().get(1) {
+                            None => {}
+                            Some(found) => {
+                                let p = &found.path;
+                                let p= quote!{#p};
+                                if p.to_string().contains("one"){
+                                    let inc = found.tokens.to_string().replace("(","").replace(")","").to_string();
+                                    let inc = inc.split(",").collect_vec();
+                                    let return_type = proc_macro2::TokenStream::from_str(inc.get(0).unwrap()).unwrap();
+                                    let join_key= proc_macro2::TokenStream::from_str(inc.get(1).unwrap()).unwrap();
+                                    let t=quote!{
+                                        async fn #field_camel(&self,ctx:&Context<'_>,like : Option<super::#return_type::ModelInput>) -> super::#return_type::Model{
+                                            let loader = ctx.data_unchecked::<DataLoader<crate::SqliteLoader>>();
+                                            if let Some(mut model) = like{
+                                                model.id = Some(self.#join_key);
+                                                match loader.load_one(model).await.unwrap().unwrap().get(0) {
+                                                    None => {return super::#return_type::Model::default()}
+                                                    Some(found) => {return found.to_owned()}
+                                                }
+                                            }
+                                            loader.load_one(super::#return_type::ModelInput{id:Some(self.#join_key),..super::#return_type::ModelInput::default()}).await.unwrap().unwrap().get(0).unwrap().to_owned()
+                                        }
+                                    };
+                                    tokens_ob_fields.push(t);
+                                } else {
+                                    let inc = found.tokens.to_string().replace("(","").replace(")","").to_string();
+                                    let inc = inc.split(",").collect_vec();
+                                    let return_type = proc_macro2::TokenStream::from_str(inc.get(0).unwrap()).unwrap();
+                                    let join_key= proc_macro2::TokenStream::from_str(inc.get(1).unwrap()).unwrap();
+                                    let t=quote!{
+                                            async fn #field_camel(&self,ctx:&Context<'_>,mut like : Option<super::#return_type::ModelInput>) -> Vec<super::#return_type::Model>{
+                                                let loader = ctx.data_unchecked::<super::DataLoader<crate::SqliteLoader>>();
+                                                match like {
+                                                    None => {return loader.load_one(
+                                                        super::#return_type::ModelInput{#join_key:Some(self.id),..super::#return_type::ModelInput::default()}
+                                                    ).await.unwrap().unwrap()}
+                                                    Some(mut like) => {
+                                                        like.#join_key = Some(self.id);
+                                                        return loader.load_one(like).await.unwrap().unwrap();
+                                                    }
+                                                }
+                                            }
+                                    };
+                                    tokens_ob_fields.push(t);
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
     let rs = quote! {
+        use async_graphql::async_trait::async_trait;
+        #[ComplexObject]
+        impl Model{
+            #(#tokens_ob_fields)*
+        }
         impl #name {
             pub fn queryBuilderMacro<T:sea_orm::EntityTrait>(keys : &[ModelInput], mut db_query: Select<T>) -> Select<T>{
                 let mut condition = Condition::all();

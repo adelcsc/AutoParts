@@ -37,7 +37,13 @@ pub struct Query;
 pub type DLoader = DataLoader<SqliteLoader>;
 #[Object]
 impl Query {
-
+    async fn cars(&self,ctx : &Context<'_>,like : Option<cars::ModelInput>) ->Vec<cars::Model> {
+        let loader = ctx.data_unchecked::<DLoader>();
+        match like {
+            None => {return cars::Entity::find().all(&loader.loader().pool).await.unwrap();}
+            Some(like) => {return loader.load_one(like).await.unwrap().unwrap();}
+        }
+    }
     //AlterName Model
     async fn alterNames(&self,ctx : &Context<'_>,like : Option<alter_names::ModelInput>) ->Vec<alter_names::Model> {
         let loader = ctx.data_unchecked::<DLoader>();
