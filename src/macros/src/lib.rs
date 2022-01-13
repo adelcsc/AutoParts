@@ -11,7 +11,7 @@ use convert_case::Casing;
 
 
 
-#[proc_macro_derive(FilterQueryBuilder,attributes(join,vec,one))]
+#[proc_macro_derive(FilterQueryBuilder,attributes(join,vec,one,cond))]
 pub fn get_query_filter(_item : TokenStream)->TokenStream {
     let ast: syn::DeriveInput = syn::parse(_item).unwrap();
     let name = ast.ident;
@@ -55,42 +55,138 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                         tokens.push(token);
                         }
                     "i32" => {
-                        let token= quote! {
-                            let mut #field_name_condition = Condition::any();
-                            let #field_name = keys.iter().filter(|x1| { match x1.#field_name {
-                                    None => {false}
-                                    Some(_) => {true}
-                                } }).map(|x1| { x1.#field_name }).unique().collect_vec();
-                            if(!#field_name.is_empty()){
-                                #field_name_condition = #field_name_condition.add(Column::#field_camel.is_in(#field_name));
+                        match field.attrs.iter().find(|x2| {
+                            let a = &x2.path;
+                            let a = quote! {#a}.to_string();
+                            a.contains("cond")
+                        }) {
+                            // Case no Condition is found
+                            None => {
+                                let token= quote! {
+                                    let #field_name = keys.iter().filter(|x1| { match x1.#field_name {
+                                            None => {false}
+                                            Some(_) => {true}
+                                        } }).map(|x1| { x1.#field_name }).unique().collect_vec();
+                                    if(!#field_name.is_empty()){
+                                        condition = condition.add(Column::#field_camel.is_in(#field_name));
+                                    }
+                                };
+                                tokens.push(token);
+                                let tk_sort = quote! {
+                                    if let Some(#field_name) = key.#field_name{
+                                        is_it=x.#field_name==#field_name;
+                                    }
+                                };
+                                tokens_sort.push(tk_sort);
                             }
-
-                            condition=condition.add(#field_name_condition);
-                            };
-                        tokens.push(token);
-                        let tk_sort = quote! {
-                            if let Some(#field_name) = key.#field_name{
-                                is_it=x.#field_name==#field_name;
+                            // Case when the condition tag is found on a value
+                            Some(cond_found) => {
+                                let conditions = cond_found.tokens.to_string().replace("(","").replace(")","");
+                                let conditions = conditions.split(",").collect_vec();
+                                let mut t_cond : Vec<proc_macro2::TokenStream> = Vec::new();
+                                let mut t_sort : Vec<proc_macro2::TokenStream> = Vec::new();
+                                for cod in conditions {
+                                    //Conditioning
+                                    let t = String::from(cod);
+                                    let t=t.split("=").collect_vec();
+                                    let op = t.as_slice().get(0).unwrap();
+                                    //Operating string
+                                    let op = proc_macro2::TokenStream::from_str(op).unwrap();
+                                    let fld = t.as_slice().get(1).unwrap();
+                                    //Field String
+                                    let fld = proc_macro2::TokenStream::from_str(fld).unwrap();
+                                    let fld_camel = proc_macro2::TokenStream::from_str(fld.to_string().to_case(Case::Pascal).as_str()).unwrap();
+                                    //Conditioning and sorting based on operationg str
+                                    match op.to_string().as_str() {
+                                        "lt" => {
+                                            let cond_v =quote!{
+                                                Column::#fld_camel.gt(#field_name.iter().max().unwrap().clone())
+                                            };
+                                            t_cond.push(cond_v);
+                                            let sort_v = quote! {
+                                                is_it=x.#fld > #field_name;
+                                            };
+                                            t_sort.push(sort_v);
+                                        }
+                                        "lte" => {
+                                            let cond_v =quote!{
+                                                Column::#fld_camel.gte(#field_name.iter().max().unwrap().clone())
+                                            };
+                                            t_cond.push(cond_v);
+                                            let sort_v = quote! {
+                                                is_it=x.#fld >= #field_name;
+                                            };
+                                            t_sort.push(sort_v);
+                                        }
+                                        "gt" => {
+                                            let cond_v =quote!{
+                                                Column::#fld_camel.lt(#field_name.iter().min().unwrap().clone())
+                                            };
+                                            t_cond.push(cond_v);
+                                            let sort_v = quote! {
+                                                is_it=x.#fld < #field_name;
+                                            };
+                                            t_sort.push(sort_v);
+                                        }
+                                        "gte" => {
+                                            let cond_v =quote!{
+                                                Column::#fld_camel.lte(#field_name.iter().min().unwrap().clone())
+                                            };
+                                            t_cond.push(cond_v);
+                                            let sort_v = quote! {
+                                                is_it=x.#fld <= #field_name;
+                                            };
+                                            t_sort.push(sort_v);
+                                        }
+                                        _ => {}
+                                    };
+                                    // end - > Conditioning
+                                }
+                                let token= quote! {
+                                    let #field_name = keys.iter().filter(|x1| { match x1.#field_name {
+                                            None => {false}
+                                            Some(_) => {true}
+                                        } }).map(|x1| { x1.#field_name }).unique().collect_vec();
+                                    if(!#field_name.is_empty()){
+                                        #(condition = condition.add(#t_cond);)*
+                                    }
+                                };
+                                tokens.push(token);
+                                let tk_sort = quote! {
+                                    if let Some(#field_name) = key.#field_name{
+                                        #(#t_sort)*
+                                    }
+                                };
+                                tokens_sort.push(tk_sort);
                             }
-                        };
-                        tokens_sort.push(tk_sort);
+                        }
                     }
                     "Paging" =>{//TODO: UNION ALL Results
                         }
                     _ => {
-                        match field.attrs.as_slice().get(0) {
-                            None => {panic!("Relational Objects must define their Relations")}
-                            Some(attr) => {
-                                let joins = attr.tokens.to_string().replace(" ","").replace("(","").replace(")","");
-                                let joins = joins.split(",").collect_vec();
-                                let mut tok :Vec<proc_macro2::TokenStream> =Vec::new();
-                                for x in joins {
-                                    let mut join = String::from(x);
-                                    join=join.add("()");
-                                    tok.push(proc_macro2::TokenStream::from_str(join.as_str()).unwrap());
-                                }
-                                let ftype=proc_macro2::TokenStream::from_str(field_type).unwrap();
-                                let token= quote! {
+                        match field.attrs.iter().find(|x1| {
+                            let p = &x1.path;
+                            let p = quote! {#p}.to_string();
+                            p.contains("join")
+                        }) {
+                            None => {panic!("Join is required for Relational Objects");}
+                            Some(_) => {}
+                        }
+                        for attr in field.attrs.iter() {
+                            let attr_tag=&attr.path;
+                            let attr_tag = quote! {#attr_tag};
+                            match attr_tag.to_string().as_str() {
+                                "join" => {
+                                    let joins = attr.tokens.to_string().replace(" ","").replace("(","").replace(")","");
+                                    let joins = joins.split(",").collect_vec();
+                                    let mut tok :Vec<proc_macro2::TokenStream> =Vec::new();
+                                    for x in joins {
+                                        let mut join = String::from(x);
+                                        join=join.add("()");
+                                        tok.push(proc_macro2::TokenStream::from_str(join.as_str()).unwrap());
+                                    }
+                                    let ftype=proc_macro2::TokenStream::from_str(field_type).unwrap();
+                                    let token= quote! {
                                     let #field_name = keys.iter().filter(|x2| {
                                         match x2.#field_name {
                                             None => { false }
@@ -104,16 +200,10 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                                     //TODO:CHANGE THIS LATER queryBuilderMacro
                                     db_query=#ftype::queryBuilderMacro::<T>(#field_name.as_slice(),db_query);
                                 };
-                                tokens.push(token);
-                            }
-                        }
-                        match field.attrs.as_slice().get(1) {
-                            None => {}
-                            Some(found) => {
-                                let p = &found.path;
-                                let p= quote!{#p};
-                                if p.to_string().contains("one"){
-                                    let inc = found.tokens.to_string().replace("(","").replace(")","").to_string();
+                                    tokens.push(token);
+                                }
+                                "one" => {
+                                    let inc = attr.tokens.to_string().replace("(", "").replace(")", "").to_string();
                                     let inc = inc.split(",").collect_vec();
                                     let return_type = proc_macro2::TokenStream::from_str(inc.get(0).unwrap()).unwrap();
                                     let join_key= proc_macro2::TokenStream::from_str(inc.get(1).unwrap()).unwrap();
@@ -131,8 +221,9 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                                         }
                                     };
                                     tokens_ob_fields.push(t);
-                                } else {
-                                    let inc = found.tokens.to_string().replace("(","").replace(")","").to_string();
+                                }
+                                "vec" => {
+                                    let inc = attr.tokens.to_string().replace("(", "").replace(")", "").to_string();
                                     let inc = inc.split(",").collect_vec();
                                     let return_type = proc_macro2::TokenStream::from_str(inc.get(0).unwrap()).unwrap();
                                     let join_key= proc_macro2::TokenStream::from_str(inc.get(1).unwrap()).unwrap();
@@ -151,6 +242,9 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                                             }
                                     };
                                     tokens_ob_fields.push(t);
+                                }
+                                _ =>{
+
                                 }
                             }
                         }
@@ -200,9 +294,5 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
             }
         }
     };
-    //panic!("{}",rs.to_string());
-
     rs.into()
-    // let f=quote! {};
-    // f.into()
 }
