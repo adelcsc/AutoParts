@@ -18,6 +18,7 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
     let mut tokens:Vec<proc_macro2::TokenStream>=Vec::new();
     let mut tokens_sort:Vec<proc_macro2::TokenStream>=Vec::new();
     let mut tokens_ob_fields : Vec<proc_macro2::TokenStream> = Vec::new();
+    let mut tokens_pages : Vec<proc_macro2::TokenStream> = Vec::new();
     if let syn::Data::Struct(info) = ast.data {
         if let syn::Fields::Named(fields) = info.fields{
             for field in fields.named {
@@ -161,8 +162,6 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                             }
                         }
                     }
-                    "Paging" =>{//TODO: UNION ALL Results
-                        }
                     _ => {
                         match field.attrs.iter().find(|x1| {
                             let p = &x1.path;
@@ -264,6 +263,17 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                 let mut condition = Condition::all();
 
                 #(#tokens)*
+                for p in keys.iter()
+                {
+                    if let Some(page) = &p.page {
+                        if let Some(limit) = page.limit {
+                            db_query = db_query.limit(limit);
+                        }
+                        if let Some(offset) = page.offset {
+                            db_query = db_query.offset(offset);
+                        }
+                    }
+                }
                 db_query.filter(condition)
             }
             fn sortResultsMacro(res:Vec<Model>,keys:&[ModelInput],mut rs:HashMap<ModelInput,Vec<Model>>) ->HashMap<ModelInput,Vec<Model>>{
