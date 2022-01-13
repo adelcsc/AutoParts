@@ -18,7 +18,6 @@ pub struct Model {
     pub id: i32,
     pub car_name: String,
     pub brand_id: i32,
-    pub serie: i32,
 }
 #[derive(Clone, Debug, PartialEq,Eq,Hash,Default,InputObject,FilterQueryBuilder)]
 #[graphql(name="CarInput")]
@@ -26,11 +25,13 @@ pub struct ModelInput {
     pub id: Option<i32>,
     pub car_name: Option<String>,
     pub brand_id: Option<i32>,
-    pub serie: Option<i32>,
     pub page : Option<Paging>,
     #[join(Relation::CarBrands.def())]
     #[one(car_brands,brand_id)]
-    pub car_brand :Option<super::car_brands::ModelInput>
+    pub car_brand :Option<super::car_brands::ModelInput>,
+    #[join(Relation::CarSeries.def())]
+    #[vec(car_series,car_id)]
+    pub car_series : Option<super::car_series::ModelInput>
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -43,13 +44,7 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     CarBrands,
-    #[sea_orm(
-        belongs_to = "super::car_series::Entity",
-        from = "Column::Serie",
-        to = "super::car_series::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Cascade"
-    )]
+    #[sea_orm(has_many = "super::car_series::Entity")]
     CarSeries,
     #[sea_orm(has_many = "super::item_car::Entity")]
     ItemCar,
