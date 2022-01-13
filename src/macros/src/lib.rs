@@ -11,7 +11,7 @@ use convert_case::Casing;
 
 
 
-#[proc_macro_derive(FilterQueryBuilder,attributes(join,vec,one,cond))]
+#[proc_macro_derive(FilterQueryBuilder,attributes(join,vec,one,cond,many))]
 pub fn get_query_filter(_item : TokenStream)->TokenStream {
     let ast: syn::DeriveInput = syn::parse(_item).unwrap();
     let name = ast.ident;
@@ -162,6 +162,8 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                             }
                         }
                     }
+                    "Paging" =>{//TODO: UNION ALL Results
+                        }
                     _ => {
                         match field.attrs.iter().find(|x1| {
                             let p = &x1.path;
@@ -238,6 +240,46 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                                                         return loader.load_one(like).await.unwrap().unwrap();
                                                     }
                                                 }
+                                            }
+                                    };
+                                    tokens_ob_fields.push(t);
+                                }
+                                "many" =>{
+                                    let inc = attr.tokens.to_string().replace("(", "").replace(")", "").to_string();
+                                    let inc = inc.split(",").collect_vec();
+                                    //Return Type
+                                    let return_type = proc_macro2::TokenStream::from_str(inc.get(0).unwrap()).unwrap();
+                                    // Join key to find the return model
+                                    let ret_type_join = proc_macro2::TokenStream::from_str(inc.get(1).unwrap()).unwrap();
+                                    // join key to find the related ids using the given model id
+                                    let src_join_key = proc_macro2::TokenStream::from_str(inc.get(2).unwrap()).unwrap();
+                                    // join table
+                                    let src_type = proc_macro2::TokenStream::from_str(inc.get(3).unwrap()).unwrap();
+                                    let t=quote!{
+                                            async fn #field_camel(&self,ctx:&Context<'_>,mut like : Option<super::#return_type::ModelInput>) -> Vec<super::#return_type::Model>{
+                                                let loader = ctx.data_unchecked::<DataLoader<SqliteLoader>>();
+                                                let item_keys = loader.load_one(
+                                                    super::#src_type::ModelInput{
+                                                        #src_join_key:Some(self.id),..super::#src_type::ModelInput::default()
+                                                    }
+                                                ).await.unwrap().unwrap().iter().map(|x| {
+                                                    match &like {
+                                                        None => {
+                                                            return super::#return_type::ModelInput{id:Some(x.#ret_type_join),..super::#return_type::ModelInput::default()};
+                                                        }
+                                                        Some(lik) => {
+                                                            let mut tobe=lik.clone();
+                                                            tobe.id=Some(x.#ret_type_join);
+                                                            return tobe;
+                                                        }
+                                                    }
+
+                                                }).collect_vec();
+                                                let mut re:Vec<super::#return_type::Model>=Vec::new();
+                                                for x in loader.load_many(item_keys).await.unwrap().iter() {
+                                                    re.append(&mut x.1.to_owned());
+                                                }
+                                                return re;
                                             }
                                     };
                                     tokens_ob_fields.push(t);

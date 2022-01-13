@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 use async_graphql::{ComplexObject, InputObject, SimpleObject};
-use async_graphql::async_trait::async_trait;
-use async_graphql::dataloader::Loader;
+use macros::FilterQueryBuilder;
+use crate::entities::Paging;
+use async_graphql::dataloader::{DataLoader, Loader};
+use async_graphql::*;
 use itertools::Itertools;
-use sea_orm::Condition;
-use sea_orm::entity::prelude::*;
-use crate::SqliteLoader;
+use sea_orm::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel,Eq,Hash,SimpleObject,Default)]
 #[graphql(name="Item",complex)]
@@ -21,74 +21,22 @@ pub struct Model {
     pub buy_id: i32,
     pub part_brand_id: i32,
 }
-#[derive(Clone, Debug, PartialEq,Eq,Hash,Default,InputObject)]
+#[derive(Clone, Debug, PartialEq,Eq,Hash,Default,InputObject,FilterQueryBuilder)]
 #[graphql(name="ItemInput")]
 pub struct ModelInput {
     pub id: Option<i32>,
     pub part_id: Option<i32>,
     pub c_bar: Option<i32>,
-    pub price: Option<i32>,
     pub buy_id: Option<i32>,
     pub part_brand_id: Option<i32>,
+    #[cond(lte=price)]
     pub start_price: Option<i32>,
-    pub end_price : Option<i32>
+    #[cond(gte=price)]
+    pub end_price : Option<i32>,
+    pub page : Option<Paging>
 }
 
-#[ComplexObject]
-impl Model {
 
-}
-#[async_trait]
-impl Loader<ModelInput> for SqliteLoader {
-    type Value = Vec<Model>;
-    type Error = ();
-
-    async fn load(&self, keys: &[ModelInput]) -> Result<HashMap<ModelInput, Self::Value>, Self::Error> {
-        let mut condition = Condition::any();
-        let mut rs : HashMap<ModelInput,Vec<Model>> = HashMap::new();
-
-        for key in keys {
-            let mut cond = Condition::all();
-            if let Some(id)=key.id {
-                cond=cond.add(Column::Id.eq(id));
-            }
-            if let Some(part_id)=key.part_id {
-                cond=cond.add(Column::PartId.eq(part_id));
-            }
-            if let Some(c_bar)=key.c_bar {
-                cond=cond.add(Column::CBar.eq(c_bar));
-            }
-            if let Some(price)=key.price {
-                cond=cond.add(Column::Price.eq(price));
-            }
-            if let Some(buy_id)=key.buy_id {
-                cond=cond.add(Column::BuyId.eq(buy_id));
-            }
-            if let Some(part_brand_id)=key.part_brand_id {
-                cond=cond.add(Column::PartBrandId.eq(part_brand_id));
-            }
-            if let Some(start_price)=key.start_price {
-                cond=cond.add(Column::Price.gte(start_price));
-            }
-            if let Some(end_price)=key.end_price {
-                cond=cond.add(Column::Price.lte(end_price));
-            }
-            condition=condition.add(cond);
-        }
-        let db_result = Entity::find().filter(condition).all(&self.pool).await.unwrap();
-        for key in keys {
-            let res= db_result.iter().filter(|item| {
-                let mut is_it =true;
-
-                is_it
-            }).map(|found| {
-                found.clone()
-            }).collect_vec();
-            rs.insert(key.to_owned(),res);
-        }
-        Ok(rs)
-    }
-}
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(

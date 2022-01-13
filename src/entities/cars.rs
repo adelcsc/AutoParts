@@ -9,6 +9,7 @@ use async_graphql::dataloader::{DataLoader, Loader};
 use async_graphql::*;
 use itertools::Itertools;
 use sea_orm::*;
+use crate::SqliteLoader;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel,Eq,Hash,SimpleObject,Default)]
 #[graphql(name="Car",complex)]
@@ -19,6 +20,7 @@ pub struct Model {
     pub car_name: String,
     pub brand_id: i32,
 }
+
 #[derive(Clone, Debug, PartialEq,Eq,Hash,Default,InputObject,FilterQueryBuilder)]
 #[graphql(name="CarInput")]
 pub struct ModelInput {
@@ -31,7 +33,10 @@ pub struct ModelInput {
     pub car_brand :Option<super::car_brands::ModelInput>,
     #[join(Relation::CarSeries.def())]
     #[vec(car_series,car_id)]
-    pub car_series : Option<super::car_series::ModelInput>
+    pub car_series : Option<super::car_series::ModelInput>,
+    #[join(Relation::ItemCar.def(),super::item_car::Relation::Items.def())]
+    #[many(items,item_id,car_id,item_car)]
+    pub items : Option<super::items::ModelInput>
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
