@@ -257,7 +257,7 @@ pub fn get_query_filter(_item : TokenStream)->TokenStream {
                                     let src_type = proc_macro2::TokenStream::from_str(inc.get(3).unwrap()).unwrap();
                                     let t=quote!{
                                             async fn #field_camel(&self,ctx:&Context<'_>,mut like : Option<super::#return_type::ModelInput>) -> Vec<super::#return_type::Model>{
-                                                let loader = ctx.data_unchecked::<DataLoader<SqliteLoader>>();
+                                                let loader = ctx.data_unchecked::<DataLoader<crate::SqliteLoader>>();
                                                 let item_keys = loader.load_one(
                                                     super::#src_type::ModelInput{
                                                         #src_join_key:Some(self.id),..super::#src_type::ModelInput::default()
